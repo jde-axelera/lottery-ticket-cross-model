@@ -62,6 +62,7 @@ def train(
         data=data, epochs=epochs, imgsz=imgsz, batch=batch,
         workers=8, optimizer='AdamW', lr0=0.001, lrf=0.01,
         warmup_epochs=5, patience=30,
+        amp=False,   # full float32 training
         mosaic=1.0, mixup=0.1, copy_paste=0.1,
         degrees=5.0, translate=0.1, scale=0.5,
         fliplr=0.5, flipud=0.0,
