@@ -1,0 +1,6 @@
+ultralytics
+albumentations
+pillow
+numpy
+opencv-python-headless
+tqdm
