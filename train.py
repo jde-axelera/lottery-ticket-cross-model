@@ -49,17 +49,19 @@ AUGMENTATION_CONFIG = {
 
 def train(
     data: str,
-    batch: int = 32,
+    batch: int = 128,       # 32 per GPU × 4 GPUs
     epochs: int = 150,
     imgsz: int = 640,
     model_name: str = 'yolov8n.pt',
     run_name: str = 'lottery_cross_v1',
+    device: str = '0,1,2,3',
     use_mlflow: bool = True,
     mlflow_experiment: str = 'lottery-ticket-cross-model',
 ) -> None:
 
     hyp = dict(
         data=data, epochs=epochs, imgsz=imgsz, batch=batch,
+        device=device,
         workers=8, optimizer='AdamW', lr0=0.001, lrf=0.01,
         warmup_epochs=5, patience=30,
         amp=False,   # full float32 training
@@ -94,11 +96,12 @@ def train(
 if __name__ == '__main__':
     ap = argparse.ArgumentParser()
     ap.add_argument('--data',       default='dataset/dataset.yaml')
-    ap.add_argument('--batch',      type=int, default=32)
+    ap.add_argument('--batch',      type=int, default=128)
     ap.add_argument('--epochs',     type=int, default=150)
     ap.add_argument('--imgsz',      type=int, default=640)
     ap.add_argument('--model',      default='yolov8n.pt')
     ap.add_argument('--name',       default='lottery_cross_v1')
+    ap.add_argument('--device',     default='0,1,2,3')
     ap.add_argument('--no-mlflow',  action='store_true')
     ap.add_argument('--experiment', default='lottery-ticket-cross-model')
     args = ap.parse_args()
@@ -110,6 +113,7 @@ if __name__ == '__main__':
         imgsz=args.imgsz,
         model_name=args.model,
         run_name=args.name,
+        device=args.device,
         use_mlflow=not args.no_mlflow,
         mlflow_experiment=args.experiment,
     )
