@@ -16,6 +16,12 @@ from pathlib import Path
 import numpy as np
 from ultralytics import YOLO
 
+try:
+    from mlflow_logger import MLflowLogger
+    _MLFLOW_AVAILABLE = True
+except ImportError:
+    _MLFLOW_AVAILABLE = False
+
 
 def evaluate(model_path: str, data: str, iou: float = 0.5) -> None:
     model = YOLO(model_path)
@@ -96,6 +102,15 @@ def evaluate(model_path: str, data: str, iou: float = 0.5) -> None:
     print(f"  Precision : {mp_tta:.4f}")
     print(f"  Recall    : {mr_tta:.4f}")
     print(f"  mAP@0.50  : {map50_tta:.4f}")
+
+    # Log test results to MLflow (looks up the most recent run for this model)
+    if _MLFLOW_AVAILABLE:
+        try:
+            logger = MLflowLogger(experiment='lottery-ticket-cross-model')
+            logger.log_test_results(results)
+            logger.log_test_results(results_tta)
+        except Exception as e:
+            print(f"(MLflow logging skipped: {e})")
 
 
 if __name__ == '__main__':
