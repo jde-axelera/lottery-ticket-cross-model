@@ -10,3 +10,6 @@ build/
 .venv/
 venv/
 runs/
+
+# Model weights (use git-lfs or download separately)
+weights/*.pt
