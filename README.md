@@ -6,9 +6,10 @@ Detection of hand-drawn cross marks on **Loto Libanais** lottery card scans usin
 |---|---|
 | **Model** | YOLOv8n (6.3M params) |
 | **Task** | Single-class object detection (`cross`) |
-| **Training data** | 85,000 synthetic images |
-| **Val precision** | 1.000 |
-| **Val recall** | 0.955 |
+| **Training data** | 30,000 synthetic images (v2) |
+| **Test precision** | **1.000** |
+| **Test recall** | **1.000** |
+| **Test mAP@50** | 0.995 |
 | **CPU inference** | ~20 ms / image |
 
 ---
@@ -63,15 +64,15 @@ A blank card scan is used as the base. `cross_generator.py` renders randomised, 
 
 ---
 
-### 2. Dataset — 85,000 Images
+### 2. Dataset — 30,000 Images (v2)
 
 | Split | Count | Augmentation |
 |-------|-------|-------------|
-| Train | 59,500 | Heavy (16 transforms) |
-| Val   | 17,000 | Medium |
-| Test  | 8,500  | None — clean synthetic |
+| Train | 21,000 | Heavy (16 transforms) |
+| Val   | 6,000  | Medium |
+| Test  | 3,000  | None — clean synthetic |
 
-Built with 40-worker multiprocessing in ~60 minutes.
+Built with 40-worker multiprocessing. Key parameter: `--crosses-per-subcol 1` ensures exactly one cross per grid cell — no overlapping duplicate ground-truth boxes.
 
 **Training augmentation pipeline** (Albumentations 2.x) — simulates real lottery-shop camera conditions:
 
@@ -87,7 +88,7 @@ RGBShift · ToGray
 **Generate the dataset yourself:**
 
 ```bash
-python generate_dataset.py --output dataset/ --total 85000
+python generate_dataset.py --output dataset/ --total 30000 --crosses-per-subcol 1
 ```
 
 ---
@@ -122,12 +123,26 @@ python train.py \
 
 ### 4. Results
 
+**v2 (current)** — `crosses_per_subcol=1` fix:
+
 | Split | Precision | Recall | mAP@50 | mAP@50-95 |
 |-------|-----------|--------|--------|-----------|
-| Val   | **1.000** | 0.955  | 0.955  | 0.804     |
-| Test  | **1.000** | 0.955  | 0.955  | 0.803     |
+| Val   | **1.000** | **1.000** | 0.995 | 0.845 |
+| Test  | **1.000** | **1.000** | 0.995 | 0.845 |
 
-Zero false positives at any confidence threshold. The 4.5% recall gap is stable across IoU thresholds 0.3–0.6, indicating a small fraction of hard cases (very small marks) rather than an NMS suppression issue.
+Zero false positives, zero false negatives across all test images.
+
+<details>
+<summary>v1 results (for reference)</summary>
+
+| Split | Precision | Recall | mAP@50 | mAP@50-95 |
+|-------|-----------|--------|--------|-----------|
+| Val   | 1.000 | 0.955 | 0.955 | 0.804 |
+| Test  | 1.000 | 0.955 | 0.955 | 0.803 |
+
+Root cause of R=0.955: `crosses_per_subcol` randomly allowed 2 crosses per grid cell, producing overlapping duplicate bounding-box labels 1–3 px apart. The model correctly detected 1 mark, but the GT contained 2 → false negative. Fixed in v2 by enforcing `crosses_per_subcol=1`.
+
+</details>
 
 ---
 
