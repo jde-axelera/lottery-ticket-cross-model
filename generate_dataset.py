@@ -53,7 +53,7 @@ _cg._INK_COLORS = _cg._INK_COLORS + _EXTRA_COLORS
 # Albumentations pipelines
 # ---------------------------------------------------------------------------
 
-def _make_train_transform() -> A.Compose:
+def _make_train_transform(min_visibility: float = 0.3) -> A.Compose:
     return A.Compose([
         A.Perspective(scale=(0.05, 0.20), p=0.5),
         A.Affine(translate_percent={"x": (-0.06, 0.06), "y": (-0.06, 0.06)},
@@ -78,10 +78,10 @@ def _make_train_transform() -> A.Compose:
         A.ToGray(p=0.1),
     ],
     bbox_params=A.BboxParams(
-        format='yolo', label_fields=['class_labels'], min_visibility=0.3))
+        format='yolo', label_fields=['class_labels'], min_visibility=min_visibility))
 
 
-def _make_val_transform() -> A.Compose:
+def _make_val_transform(min_visibility: float = 0.3) -> A.Compose:
     return A.Compose([
         A.Blur(blur_limit=5, p=0.2),
         A.GaussNoise(std_range=(0.03, 0.10), p=0.25),
@@ -89,7 +89,7 @@ def _make_val_transform() -> A.Compose:
         A.ImageCompression(quality_range=(50, 90), p=0.3),
     ],
     bbox_params=A.BboxParams(
-        format='yolo', label_fields=['class_labels'], min_visibility=0.3))
+        format='yolo', label_fields=['class_labels'], min_visibility=min_visibility))
 
 
 # ---------------------------------------------------------------------------
@@ -98,12 +98,20 @@ def _make_val_transform() -> A.Compose:
 
 _BASE_IMAGE_PATH: str = ''  # set by initializer
 _BASE_IMAGE: Image.Image | None = None
+# Worker-level globals set by _init_worker (pickling-safe multiprocessing config)
+_G_CROSSES_PER_SUBCOL: int = 1
+_G_SIZE_MIN: int = 10
+_G_MIN_VISIBILITY: float = 0.3
 
 
-def _init_worker(base_image_path: str) -> None:
-    global _BASE_IMAGE, _BASE_IMAGE_PATH
+def _init_worker(base_image_path: str, crosses_per_subcol: int = 1,
+                 size_min: int = 10, min_visibility: float = 0.3) -> None:
+    global _BASE_IMAGE, _BASE_IMAGE_PATH, _G_CROSSES_PER_SUBCOL, _G_SIZE_MIN, _G_MIN_VISIBILITY
     _BASE_IMAGE_PATH = base_image_path
     _BASE_IMAGE = Image.open(base_image_path)
+    _G_CROSSES_PER_SUBCOL = crosses_per_subcol
+    _G_SIZE_MIN = size_min
+    _G_MIN_VISIBILITY = min_visibility
     import cross_generator as cg
     cg._INK_COLORS = cg._INK_COLORS + _EXTRA_COLORS if len(cg._INK_COLORS) <= 4 else cg._INK_COLORS
 
@@ -113,14 +121,14 @@ def _generate_one(args: tuple) -> None:
     out = Path(out_dir)
 
     if split == 'train':
-        tf = _make_train_transform()
+        tf = _make_train_transform(min_visibility=_G_MIN_VISIBILITY)
     elif split == 'val':
-        tf = _make_val_transform()
+        tf = _make_val_transform(min_visibility=_G_MIN_VISIBILITY)
     else:
         tf = None
 
-    cpc = random.choice([1, 1, 2])
-    size_lo = random.randint(10, 14)
+    cpc = _G_CROSSES_PER_SUBCOL
+    size_lo = random.randint(_G_SIZE_MIN, _G_SIZE_MIN + 4)
     size_hi = random.randint(18, 25)
 
     img_arr, labels = generate_sample(
@@ -162,7 +170,9 @@ def _generate_one(args: tuple) -> None:
 # ---------------------------------------------------------------------------
 
 def generate(base_image_path: str, output_dir: str,
-             total: int = 85_000, workers: int = 40) -> None:
+             total: int = 85_000, workers: int = 40,
+             crosses_per_subcol: int = 1, size_min: int = 10,
+             min_visibility: float = 0.3) -> None:
     out = Path(output_dir)
     counts = {
         'train': int(total * 0.70),
@@ -187,8 +197,9 @@ def generate(base_image_path: str, output_dir: str,
             tasks.append((f"{idx:07d}", split, str(out)))
             idx += 1
 
+    print(f"  crosses_per_subcol={crosses_per_subcol}  size_min={size_min}  min_visibility={min_visibility}")
     with Pool(workers, initializer=_init_worker,
-              initargs=(base_image_path,)) as pool:
+              initargs=(base_image_path, crosses_per_subcol, size_min, min_visibility)) as pool:
         for _ in tqdm(pool.imap_unordered(_generate_one, tasks, chunksize=20),
                       total=len(tasks), unit='img', desc='generating'):
             pass
@@ -207,9 +218,18 @@ def generate(base_image_path: str, output_dir: str,
 
 if __name__ == '__main__':
     ap = argparse.ArgumentParser()
-    ap.add_argument('--base-image', default='image.png')
-    ap.add_argument('--output', default='dataset')
-    ap.add_argument('--total', type=int, default=85_000)
-    ap.add_argument('--workers', type=int, default=min(40, cpu_count()))
+    ap.add_argument('--base-image',          default='image.png')
+    ap.add_argument('--output',              default='dataset')
+    ap.add_argument('--total',               type=int,   default=85_000)
+    ap.add_argument('--workers',             type=int,   default=min(40, cpu_count()))
+    ap.add_argument('--crosses-per-subcol',  type=int,   default=1,
+                    help='Crosses per sub-column (1=no overlap, 2=allow doubles)')
+    ap.add_argument('--size-min',            type=int,   default=10,
+                    help='Minimum cross half-size in pixels')
+    ap.add_argument('--min-visibility',      type=float, default=0.3,
+                    help='Albumentations min_visibility for bbox survival after augmentation')
     args = ap.parse_args()
-    generate(args.base_image, args.output, args.total, args.workers)
+    generate(args.base_image, args.output, args.total, args.workers,
+             crosses_per_subcol=args.crosses_per_subcol,
+             size_min=args.size_min,
+             min_visibility=args.min_visibility)

@@ -57,13 +57,15 @@ def train(
     device: str = '0,1,2,3',
     use_mlflow: bool = True,
     mlflow_experiment: str = 'lottery-ticket-cross-model',
+    lr0: float = 0.001,
+    patience: int = 30,
 ) -> None:
 
     hyp = dict(
         data=data, epochs=epochs, imgsz=imgsz, batch=batch,
         device=device,
-        workers=8, optimizer='AdamW', lr0=0.001, lrf=0.01,
-        warmup_epochs=5, patience=30,
+        workers=8, optimizer='AdamW', lr0=lr0, lrf=0.01,
+        warmup_epochs=3, patience=patience,
         amp=False,   # full float32 training
         mosaic=1.0, mixup=0.1, copy_paste=0.1,
         degrees=5.0, translate=0.1, scale=0.5,
@@ -95,15 +97,18 @@ def train(
 
 if __name__ == '__main__':
     ap = argparse.ArgumentParser()
-    ap.add_argument('--data',       default='dataset/dataset.yaml')
-    ap.add_argument('--batch',      type=int, default=128)
-    ap.add_argument('--epochs',     type=int, default=150)
-    ap.add_argument('--imgsz',      type=int, default=640)
-    ap.add_argument('--model',      default='yolov8n.pt')
-    ap.add_argument('--name',       default='lottery_cross_v1')
-    ap.add_argument('--device',     default='0,1,2,3')
-    ap.add_argument('--no-mlflow',  action='store_true')
-    ap.add_argument('--experiment', default='lottery-ticket-cross-model')
+    ap.add_argument('--data',        default='dataset/dataset.yaml')
+    ap.add_argument('--batch',       type=int,   default=128)
+    ap.add_argument('--epochs',      type=int,   default=150)
+    ap.add_argument('--imgsz',       type=int,   default=640)
+    ap.add_argument('--model',       default='yolov8n.pt')
+    ap.add_argument('--name',        default='lottery_cross_v1')
+    ap.add_argument('--device',      default='0,1,2,3')
+    ap.add_argument('--no-mlflow',   action='store_true')
+    ap.add_argument('--experiment',  default='lottery-ticket-cross-model')
+    ap.add_argument('--lr0',         type=float, default=0.001,
+                    help='Initial LR (use 0.0001 for fine-tuning from existing weights)')
+    ap.add_argument('--patience',    type=int,   default=30)
     args = ap.parse_args()
 
     train(
@@ -116,4 +121,6 @@ if __name__ == '__main__':
         device=args.device,
         use_mlflow=not args.no_mlflow,
         mlflow_experiment=args.experiment,
+        lr0=args.lr0,
+        patience=args.patience,
     )
